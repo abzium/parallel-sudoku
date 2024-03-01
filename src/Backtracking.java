@@ -1,5 +1,5 @@
 public class Backtracking {
-    public Backtracking(String filename) {
+    public Backtracking(int[][] sudoku) {
 
     }
 

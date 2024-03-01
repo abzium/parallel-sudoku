@@ -1,5 +1,5 @@
 public class Logical {
-    public Logical(String filename) {
+    public Logical(int[][] sudoku) {
 
     }
 

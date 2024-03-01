@@ -1,12 +1,12 @@
 # parallel-sudoku
 
-## Compiling 
+## Compiling
 ```
-javac SudokuSolver.java
+javac -d bin src/*.java
 ```
 
 ## Running
 ```
-java SudokuSolver <filename> <algorithm>
+java -cp bin SudokuSolver <filename> <algorithm>
 ```
 Where `<filename>` is the name of the input sudoku file and `<algorithm>` is the desired algorithm (`bruteforce`, `backtracking`, or `logical`)

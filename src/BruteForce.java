@@ -1,5 +1,5 @@
 public class BruteForce {
-    public BruteForce(String filename) {
+    public BruteForce(int[][] sudoku) {
 
     }
 
