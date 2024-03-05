@@ -1,4 +1,11 @@
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.Scanner;
+
 public class SudokuSolver {
+    public static final int ROWS = 9;
+    public static final int COLS = 9;
+
     public static void main(String[] args) {
         if (args.length != 2) {
             System.out.println("Usage: java SudokuSolver <filename> <algorithm>");
@@ -12,7 +19,8 @@ public class SudokuSolver {
             case "bruteforce":
                 System.out.println("Running brute force algorithm.");
                 BruteForce bruteForce = new BruteForce(readFile(filename));
-                bruteForce.solve();
+                int[][] solved = bruteForce.solve();
+                printSudoku(solved);
                 break;
 
             case "backtracking":
@@ -34,7 +42,44 @@ public class SudokuSolver {
     }
 
     private static int[][] readFile(String filename) {
-        // TODO: implement
-        throw new UnsupportedOperationException("readFile not yet implemented!");
+        // read the sudoku file and insert it into an integer matrix
+        int[][] sudokuGrid = new int[ROWS][COLS];
+        File sudokuFile = new File(filename);
+        Scanner fileScan = null;
+
+        try {
+            fileScan = new Scanner(sudokuFile);
+
+        } catch (FileNotFoundException e) {
+            System.out.println("Sudoku file not found!");
+            System.exit(1);
+        }
+
+        for (int i = 0; i < ROWS; i++) {
+            String line = fileScan.nextLine();
+            for (int j = 0; j < COLS; j++) {
+                int cell = Character.getNumericValue(line.charAt(j)); // returns -1 if the character is '.'
+                if (cell == -1) {
+                    sudokuGrid[i][j] = 0;
+                } else {
+                    sudokuGrid[i][j] = cell;
+                }
+            }
+        }
+
+        return sudokuGrid;
+    }
+
+    private static void printSudoku(int[][] sudoku) {
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (j % 3 == 0 && j != 0)
+                    System.out.print(" |");
+                System.out.print(" " + sudoku[i][j]);
+            }
+            System.out.print('\n');
+            if (i % 3 == 2 && i != 8)
+                System.out.println("-------|-------|-------");
+        }
     }
 }
