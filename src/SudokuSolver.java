@@ -1,3 +1,9 @@
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+
 public class SudokuSolver {
     public static void main(String[] args) {
         if (args.length != 2) {
@@ -34,7 +40,18 @@ public class SudokuSolver {
     }
 
     private static int[][] readFile(String filename) {
-        // TODO: implement
-        throw new UnsupportedOperationException("readFile not yet implemented!");
+        try (final FileReader fr = new FileReader(filename);
+            final BufferedReader br = new BufferedReader(fr)) {
+            return br.lines().map(line -> line.chars().map(c -> c == '.' ? 0 : c - '0').toArray()).toArray(int[][]::new);
+        } catch (FileNotFoundException e) {
+            System.err.println("File \""+filename+"\" not found!");
+            System.exit(1);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (UncheckedIOException e) {
+            e.getCause().printStackTrace();
+        }
+        System.exit(-1);
+        return null;
     }
 }
