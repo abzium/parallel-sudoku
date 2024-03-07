@@ -1,7 +1,7 @@
 import java.util.Arrays;
 
 /**
- * @implNote Every deduction strategy (the {@code private} methods besides {@link #setValue} and {@link #clearCandidateBox}) has the following attributes:
+ * @implNote Every deduction strategy (the {@code private} methods besides {@link #setValue}) has the following attributes:
  * <ul><li>name ending in {@code Cols}, {@code Rows}, or {@code Box},
  *   indicating whether it scans across the {@link #BOX_WIDTH} columns the box occupies, the {@link #BOX_HEIGHT} rows, or just the box itself
  * <li>parameters {@code (minY, maxY, minX, maxX)}, with {@code min}s inclusive and {@code max}es exclusive,
@@ -235,7 +235,6 @@ public class Logical {
       minY = boxI * BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
     (isRow ? rowDirtied : colDirtied)[boxI][boxJ] = false;
     boolean dirtied = false;
-    updateCandidatesBox(minY, maxY, minX, maxX);
     dirtied |= nakedSinglesBox(minY, maxY, minX, maxX);
     dirtied |= isRow ? hiddenSinglesRows(minY, maxY, minX, maxX) : hiddenSinglesCols(minY, maxY, minX, maxX);
     dirtied |= hiddenSinglesBox(minY, maxY, minX, maxX);
@@ -259,52 +258,32 @@ public class Logical {
   }
 
   // Updates the candidates on solved cells by eliminating those that don't match the cell's value.
+  // Also clears that value from the rest of the row, column, and box.
   void fixCandidatesBoard() {
     for (int i = 0; i < SIZE; i++) {
       for (int j = 0; j < SIZE; j++) {
-        if (sudoku[i][j] != UNKNOWN) {
-          Arrays.fill(candidates[i][j], false);
-          candidates[i][j][sudoku[i][j]] = true;
+        final int c = sudoku[i][j];
+        if (c != UNKNOWN) {
+          final int minX = j/BOX_WIDTH*BOX_WIDTH, maxX = minX + BOX_WIDTH,
+            minY = i/BOX_HEIGHT*BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
+          setValue(i, j, c, minY, maxY, minX, maxX);
         }
       }
     }
   }
 
-  // Updates the candidates in this box by eliminating those that match solved cells in their row, column, and box.
-  // TODO: Should this return whether something changed in case the elimination of candidates is enough to make more deductions in other columns/rows? Or do the strategies for this box cover that already?
-  private void updateCandidatesBox(int minY, int maxY, int minX, int maxX) {
-    for (int i = minY; i < maxY; i++) {
-      for (int j = minX; j < maxX; j++) {
-        if (sudoku[i][j] == UNKNOWN) {
-          for (int c : sudoku[i])
-            candidates[i][j][c] = false;
-          for (int i1 = 0; i1 < SIZE; i1++)
-            candidates[i][j][sudoku[i1][j]] = false;
-          for (int i1 = minY; i1 < maxY; i1++)
-            for (int j1 = minX; j1 < maxX; j1++)
-              candidates[i][j][sudoku[i1][j1]] = false;
-        }
-      }
-    }
-  }
-
-  // Sets a known value while clearing the other candidates from that cell.
-  private void setValue(int i, int j, int c) {
+  // Sets a known value while clearing the other candidates from that cell and clearing that value from candidates of other cells in its row, column, and box.
+  private void setValue(int i, int j, int c, int minY, int maxY, int minX, int maxX) {
     for (int c1 = 1; c1 <= SIZE; c1++) if (c1 != c) candidates[i][j][c1] = false;
-    sudoku[i][j] = c;
-  }
-
-  // Clears the given candidate value from a box.
-  // Necessary because the singles methods continue iterating within the same box, and may hence attempt to assign c elsewhere
-  // because it doesn't otherwise get removed until the next updateCandidatesBox. This only occurs if the puzzle's unsolvable,
-  // but that can happen under normal circumstances, especially if we need to guessAndCheck.
-  // Not otherwise necessary; in particular, shouldn't be a barrier to parallelization if boxes are locked properly.
-  private void clearCandidateBox(int c, int minY, int maxY, int minX, int maxX) {
-    for (int i = minY; i < maxY; i++) {
-      for (int j = minX; j < maxX; j++) {
-        if (sudoku[i][j] != c) candidates[i][j][c] = false;
+    for (int i1 = 0; i1 < SIZE; i1++) if (i1 != i) candidates[i1][j][c] = false;
+    for (int j1 = 0; j1 < SIZE; j1++) if (j1 != j) candidates[i][j1][c] = false;
+    for (int i2 = minY; i2 < maxY; i2++) {
+      for (int j2 = minX; j2 < maxX; j2++) {
+        // && vs || here doesn't matter, since cells in the row/column were already eliminated from.
+        if (i2 != i && j2 != j) candidates[i2][j2][c] = false;
       }
     }
+    sudoku[i][j] = c;
   }
 
   // Fills in cells that have only one candidate value.
@@ -328,8 +307,7 @@ public class Logical {
           throw new UnsolvableException("no candidates in cell R" + i + "C" + j + "!");
         }
         // fill it in
-        setValue(i, j, value);
-        clearCandidateBox(value, minY, maxY, minX, maxX);
+        setValue(i, j, value, minY, maxY, minX, maxX);
         dirtied = true;
       }
     }
@@ -353,8 +331,7 @@ public class Logical {
             if (candidates[i][j1][c]) continue candidates;
           }
           // fill it in
-          setValue(i, j, c);
-          clearCandidateBox(c, minY, maxY, minX, maxX);
+          setValue(i, j, c, minY, maxY, minX, maxX);
           dirtied = true;
           break candidates;
         }
@@ -378,8 +355,7 @@ public class Logical {
             if (candidates[i1][j][c]) continue candidates;
           }
           // fill it in
-          setValue(i, j, c);
-          clearCandidateBox(c, minY, maxY, minX, maxX);
+          setValue(i, j, c, minY, maxY, minX, maxX);
           dirtied = true;
           break candidates;
         }
@@ -405,8 +381,7 @@ public class Logical {
             }
           }
           // fill it in
-          setValue(i, j, c);
-          clearCandidateBox(c, minY, maxY, minX, maxX);
+          setValue(i, j, c, minY, maxY, minX, maxX);
           dirtied = true;
           break candidates;
         }
