@@ -1,7 +1,5 @@
 import java.lang.Math;
-import java.lang.reflect.Array;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
 public class BruteForce {
@@ -38,7 +36,12 @@ public class BruteForce {
                 for (int i = 0; i < iterations; i++) {
                     ArrayList<ArrayList<ArrayList<Integer>>> newState = chooseNewState(tmpSudoku, fixedSudoku,
                             listBlocks, sigma);
-                    tmpSudoku = newState.get(0);
+                    // tmpSudoku = newState.get(0);
+                    for (int j = 0; j < tmpSudoku.length; j++) {
+                        for (int k = 0; k < tmpSudoku.length; k++) {
+                            tmpSudoku[j][k] = newState.get(0).get(j).get(k);
+                        }
+                    }
                     int scoreDiff = newState.get(1).get(0).get(0);
                     score += scoreDiff;
                     System.out.println(score);
@@ -71,32 +74,32 @@ public class BruteForce {
         return sudoku;
     }
 
-    private boolean isValid(int row, int col, int num) {
-        // Check if a number does not violate the rules
-        // Check the row for violations
-        for (int i = 0; i < size; i++) {
-            if (sudoku[row][i] == num)
-                return false;
-        }
-        // Check column for violations
-        for (int i = 0; i < size; i++) {
-            if (sudoku[i][col] == num)
-                return false;
-        }
-        // Check 3x3 square for violations
-        // Get top right corner of square
-        int squareSize = (int) Math.sqrt(size);
-        int rowSquare = (row / squareSize) * squareSize;
-        int colSquare = (col / squareSize) * squareSize;
-        for (int i = rowSquare; i < rowSquare + squareSize; i++) {
-            for (int j = colSquare; j < colSquare + squareSize; j++) {
-                if (sudoku[i][j] == num)
-                    return false;
-            }
-        }
-
-        return true;
-    }
+    // private boolean isValid(int row, int col, int num) {
+    // // Check if a number does not violate the rules
+    // // Check the row for violations
+    // for (int i = 0; i < size; i++) {
+    // if (sudoku[row][i] == num)
+    // return false;
+    // }
+    // // Check column for violations
+    // for (int i = 0; i < size; i++) {
+    // if (sudoku[i][col] == num)
+    // return false;
+    // }
+    // // Check 3x3 square for violations
+    // // Get top right corner of square
+    // int squareSize = (int) Math.sqrt(size);
+    // int rowSquare = (row / squareSize) * squareSize;
+    // int colSquare = (col / squareSize) * squareSize;
+    // for (int i = rowSquare; i < rowSquare + squareSize; i++) {
+    // for (int j = colSquare; j < colSquare + squareSize; j++) {
+    // if (sudoku[i][j] == num)
+    // return false;
+    // }
+    // }
+    //
+    // return true;
+    // }
 
     private ArrayList<Integer> getMissingNumbers(ArrayList<Integer> row) {
         // Returns the missing numbers in a row
