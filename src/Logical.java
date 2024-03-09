@@ -70,9 +70,10 @@ public class Logical {
             tempCandidates[i][j] = candidates[i][j].clone();
           }
         }
-        tempSudoku[minI][minJ] = c;
         try {
-          new Logical(tempSudoku, tempCandidates).solve(FallbackSolver.guessAndCheck);
+          final Logical logical = new Logical(tempSudoku, tempCandidates);
+          logical.setValue(minI, minJ, c);
+          logical.solve(FallbackSolver.guessAndCheck);
           // if the solution worked copy it back into the original grid
           for (int i = 0; i < SIZE; i++) {
             sudoku[i] = tempSudoku[i];
@@ -120,8 +121,8 @@ public class Logical {
     colDirtied = new boolean[NUM_BOXES_Y][NUM_BOXES_X];
 
   /**
-   * Initializes the solver.
-   * <p>This does <em>not</em> check if the givens break any rules; if they do, behavior is undefined.
+   * Constructs the solver.
+   * <p>If there are any givens, call {@link #init}; this initiializes the solver and checks for illegal givens.
    * @param sudoku The sudoku grid, with {@link #UNKNOWN <code>0</code>s for unknowns} and values from 1 to {@link #SIZE} for givens.
    *   Should not be modified externally, otherwise this solver could be in an inconsistent state.
    * @throws IllegalArgumentException If the {@code sudoku} grid isn't a square of size {@link #SIZE}.
@@ -178,11 +179,12 @@ public class Logical {
 
   /**
    * Solves the grid in-place as much as possible, using {@link FallbackSolver#guessAndCheck} when no more deductions can be made.
-   * Only fails when there is no solution (printing as much of the grid as could be determined along with the remaining candidates);
-   * prints one of the solutions when there are multiple.
+   * When there is no solution, this prints as much of the grid as could be determined along with the remaining candidates;
+   * when there are multiple, this prints any one of the solutions.
    */
   public void solve() {
     try {
+      init();
       solve(FallbackSolver.guessAndCheck);
     } catch (UnsolvableException e) {
       System.out.println("The sudoku couldn't be solved!");
@@ -192,13 +194,13 @@ public class Logical {
   }
   /**
    * Solves the grid in-place as much as possible.
+   * <p>Assumes the {@link #candidates} have already been initialized; usually this means having called {@link #init}.
    * @param fallback The solver to fall back on when no more deductions can be made.
    * @throws UnsolvableException If either a deduction was made that eliminates all possibilities, or the {@code fallback} failed to solve the Sudoku for any reason.
    */
   public void solve(FallbackSolver fallback) throws UnsolvableException {
     for (boolean[] row : rowDirtied) Arrays.fill(row, true);
     for (boolean[] row : colDirtied) Arrays.fill(row, true);
-    fixCandidatesBoard();
     while (true) {
       boolean anyDirtied = false;
       // rows and columns are separate loops to cycle through the rest of the boxes once before swinging back around for the column
@@ -257,22 +259,35 @@ public class Logical {
     }
   }
 
-  // Updates the candidates on solved cells by eliminating those that don't match the cell's value.
-  // Also clears that value from the rest of the row, column, and box.
-  void fixCandidatesBoard() {
+  /**
+   * Initializes the solver. Need only be called once.
+   * <p>Specifically, this:
+   * <ul><li>updates the {@link #candidates} on solved cells by eliminating those that don't match the given,
+   * <li>clears each given from candidates in the rest of its row, column, and box, and
+   * <li>checks if the givens conflict.</ul>
+   * Need only be called once, at initialization. Need only be called if there are any givens;
+   * if there are, this must be called before {@link #solve(FallbackSolver)}, otherwise behavior is undefined.
+   * @throws UnsolvableException If any givens directly conflict; i.e., if two of the same given are in the same row, column, or box.
+   */
+  public void init() throws UnsolvableException {
     for (int i = 0; i < SIZE; i++) {
       for (int j = 0; j < SIZE; j++) {
         final int c = sudoku[i][j];
         if (c != UNKNOWN) {
-          final int minX = j/BOX_WIDTH*BOX_WIDTH, maxX = minX + BOX_WIDTH,
-            minY = i/BOX_HEIGHT*BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
-          setValue(i, j, c, minY, maxY, minX, maxX);
+          if (!candidates[i][j][c])
+            throw new UnsolvableException("Given at R"+i+"C"+j+" conflicts with another!");
+          setValue(i, j, c);
         }
       }
     }
   }
 
   // Sets a known value while clearing the other candidates from that cell and clearing that value from candidates of other cells in its row, column, and box.
+  private void setValue(int i, int j, int c) {
+    final int minX = j/BOX_WIDTH*BOX_WIDTH, maxX = minX + BOX_WIDTH,
+      minY = i/BOX_HEIGHT*BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
+    setValue(i, j, c, minY, maxY, minX, maxX);
+  }
   private void setValue(int i, int j, int c, int minY, int maxY, int minX, int maxX) {
     for (int c1 = 1; c1 <= SIZE; c1++) if (c1 != c) candidates[i][j][c1] = false;
     for (int i1 = 0; i1 < SIZE; i1++) if (i1 != i) candidates[i1][j][c] = false;
