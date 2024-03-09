@@ -20,11 +20,11 @@ public class BruteForce {
             for (int i = 0; i < sudoku.length; i++) {
                 fixedSudoku[i] = sudoku[i].clone();
             }
-            // Print Sudoku
             fixSudokuValues(fixedSudoku);
             ArrayList<ArrayList<ArrayList<Integer>>> listBlocks = create3x3Blocks();
             int[][] tmpSudoku = randomlyFill3x3Blocks(sudoku, listBlocks);
-            double sigma = calculateInitialSigma(tmpSudoku, fixedSudoku, listBlocks);
+
+            double sigma = calculateInitialSigma(sudoku, fixedSudoku, listBlocks);
             int score = calculateNumberOfErrors(convert2dArray(tmpSudoku));
             int iterations = chooseNumberOfIterations(fixedSudoku);
             if (score <= 0) {
@@ -204,11 +204,12 @@ public class BruteForce {
                     secondBoxChoices.add(block.get(i));
                 }
             }
-            secondBox = secondBoxChoices.get(rand.nextInt());
+            secondBox = secondBoxChoices.get(rand.nextInt(secondBoxChoices.size()));
             if (fixedSudoku[firstBox.get(0)][firstBox.get(1)] != 1
                     && fixedSudoku[secondBox.get(0)][secondBox.get(1)] != 1) {
                 ArrayList<ArrayList<Integer>> twoBoxes = new ArrayList<>();
                 twoBoxes.add(firstBox);
+                twoBoxes.add(secondBox);
                 return twoBoxes;
             }
         }
@@ -340,21 +341,25 @@ public class BruteForce {
 
     private ArrayList<ArrayList<ArrayList<Integer>>> chooseNewState(int[][] currentSudoku, int[][] fixedSudoku,
             ArrayList<ArrayList<ArrayList<Integer>>> listOfBlocks, double sigma) {
+
         ArrayList<ArrayList<ArrayList<Integer>>> proposal = proposedState(convert2dArray(currentSudoku), fixedSudoku,
                 listOfBlocks);
         ArrayList<ArrayList<Integer>> newSudoku = proposal.get(0);
         ArrayList<ArrayList<Integer>> boxesToCheck = proposal.get(1);
-        int currentCost = calculateNumberOfErrorsRowColumn(boxesToCheck.get(0).get(0), boxesToCheck.get(0).get(1),
-                convert2dArray(currentSudoku))
-                + calculateNumberOfErrorsRowColumn(boxesToCheck.get(1).get(0), boxesToCheck.get(1).get(1),
-                        convert2dArray(currentSudoku));
-        int newCost = calculateNumberOfErrorsRowColumn(boxesToCheck.get(0).get(0), boxesToCheck.get(0).get(1),
-                newSudoku)
-                + calculateNumberOfErrorsRowColumn(boxesToCheck.get(1).get(0), boxesToCheck.get(1).get(1), newSudoku);
+        int boxes_00 = boxesToCheck.get(0).get(0);
+        int boxes_01 = boxesToCheck.get(0).get(1);
+        int boxes_10 = boxesToCheck.get(1).get(0);
+        int boxes_11 = boxesToCheck.get(1).get(1);
+
+        int currentCost = calculateNumberOfErrorsRowColumn(boxes_00, boxes_01, convert2dArray(currentSudoku))
+                + calculateNumberOfErrorsRowColumn(boxes_10, boxes_11, convert2dArray(currentSudoku));
+        int newCost = calculateNumberOfErrorsRowColumn(boxes_00, boxes_01, newSudoku)
+                + calculateNumberOfErrorsRowColumn(boxes_10, boxes_11, newSudoku);
         int costDifference = newCost - currentCost;
         double rho = Math.exp(-costDifference / sigma);
         ArrayList<ArrayList<ArrayList<Integer>>> newState = new ArrayList<>();
-        if (1 < rho) {
+        Random rand = new Random();
+        if (rand.nextDouble(1.0) < rho) {
             newState.add(newSudoku);
             // wrapping time
             ArrayList<Integer> cd = new ArrayList<>();
@@ -371,5 +376,18 @@ public class BruteForce {
         wrap.add(cd);
         newState.add(wrap);
         return newState;
+    }
+
+    private void printSudoku(int[][] sudoku) {
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (j % 3 == 0 && j != 0)
+                    System.out.print(" |");
+                System.out.print(" " + sudoku[i][j]);
+            }
+            System.out.print('\n');
+            if (i % 3 == 2 && i != 8)
+                System.out.println("-------|-------|-------");
+        }
     }
 }
