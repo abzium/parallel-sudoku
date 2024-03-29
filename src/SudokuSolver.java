@@ -1,10 +1,15 @@
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.Scanner;
+import java.util.concurrent.ForkJoinPool;
 
 public class SudokuSolver {
     public static final int ROWS = 9;
     public static final int COLS = 9;
+    public static long startTime = 0;
+    public static long endTime;
+    public static boolean success;
+    public static final int MAX_THREADS = 20; // Maximum number of threads to run for Parallel Backtracking algo
 
     public static void main(String[] args) {
         if (args.length != 2) {
@@ -26,14 +31,28 @@ public class SudokuSolver {
             case "backtracking":
                 System.out.println("Running backtracking algorithm.");
                 Backtracking backtracking = new Backtracking(readFile(filename));
-                long startTime = System.currentTimeMillis();
-                boolean sucess = backtracking.solve();
-                if(sucess)
+                startTime = System.currentTimeMillis();
+                success = backtracking.solve();
+                if(success)
                     printSudoku(backtracking.getBoard());
                 else
                     System.out.println("Unsolvable board");
-                long endTime = System.currentTimeMillis();
+                endTime = System.currentTimeMillis();
                 System.out.println("Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+                break;
+
+            case "parallelizedBacktracking":
+                System.out.println("Running parallelized backtracking algorithm");
+                ParallelBacktracking parallelizedBacktracking = new ParallelBacktracking(readFile(filename));
+                startTime = System.currentTimeMillis();
+                ForkJoinPool pool = new ForkJoinPool(MAX_THREADS); // Incorporating in here allows more control over lifecycle of thread pool
+                success = pool.invoke(parallelizedBacktracking);
+                if(success)
+                    printSudoku(ParallelBacktracking.getBoard());
+                else
+                    System.out.println("Unsolvable board");
+                endTime = System.currentTimeMillis();
+                System.out.println("Run time solving board on multiple threads: " + (endTime - startTime) + " milliseconds.");
                 break;
 
             case "logical":

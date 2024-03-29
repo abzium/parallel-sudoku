@@ -1,14 +1,24 @@
+/*
+ * John Dufresne
+ * Solving a 9x9 sudoku board using Parallelized Backtracking
+ */
 import java.util.concurrent.RecursiveTask;
 import java.util.concurrent.ForkJoinPool;
 
 public class ParallelBacktracking extends RecursiveTask<Boolean> {
     private int[][] board;
+    public static int [][] solvedBoard;
     private int depth; //Depth of recursion to stop calling new threads
     public static final int SIZE = 9;
-    public static final int MAX_DEPTH = 2; // Maximum depth level
+    public static final int MAX_DEPTH = 4; // Maximum depth level
     public static final int MAX_THREADS = 20; // Maximum number of threads
 
-    public ParallelBacktracking(int[][] board, int depth) {
+    public ParallelBacktracking(int[][] board) {
+        this.board = deepCopyBoard(board);
+        this.depth = 0;
+    }
+
+    private ParallelBacktracking(int[][] board, int depth) {
         this.board = board;
         this.depth = depth;
     }
@@ -46,10 +56,12 @@ public class ParallelBacktracking extends RecursiveTask<Boolean> {
                     task.fork(); // Run this task in parallel
                     boolean result = task.join(); // Wait for the result
                     if (result) {
+                        solvedBoard = board;
                         return true;
                     }
                 } else {
                     if (task.compute()) { // Solve sequentially
+                        solvedBoard = board;
                         return true;
                     }
                 }
@@ -84,33 +96,17 @@ public class ParallelBacktracking extends RecursiveTask<Boolean> {
 
         return true; // No violation found
     }
-    public static void main(String[] args) {
-        int[][] board = {
-            { 5, 3, 0, 0, 7, 0, 0, 0, 0 },
-            { 6, 0, 0, 1, 9, 5, 0, 0, 0 },
-            { 0, 9, 8, 0, 0, 0, 0, 6, 0 },
-            { 8, 0, 0, 0, 6, 0, 0, 0, 3 },
-            { 4, 0, 0, 8, 0, 3, 0, 0, 1 },
-            { 7, 0, 0, 0, 2, 0, 0, 0, 6 },
-            { 0, 6, 0, 0, 0, 0, 2, 8, 0 },
-            { 0, 0, 0, 4, 1, 9, 0, 0, 5 },
-            { 0, 0, 0, 0, 8, 0, 0, 7, 9 }            
-        };
-        // Start time
-        long startTime = System.currentTimeMillis();
 
-        ForkJoinPool pool = new ForkJoinPool(MAX_THREADS);
-        ParallelBacktracking solver = new ParallelBacktracking(board, 0); // Start at depth level 0
-        boolean solved = pool.invoke(solver);
-        
-        if (solved) {
-            System.out.println("Sudoku solved.");
-        } else {
-            System.out.println("Sudoku cannot be solved.");
+    private static int[][] deepCopyBoard(int[][] original) {
+        int[][] copy = new int[original.length][original[0].length];
+        for (int i = 0; i < original.length; i++) {
+            System.arraycopy(original[i], 0, copy[i], 0, original[i].length);
         }
+        return copy;
+    }
 
-        // End time
-        long endTime = System.currentTimeMillis();
-        System.out.println("Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+    // Returns solved board
+    public static int[][] getBoard() {
+        return solvedBoard;
     }
 }
