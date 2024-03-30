@@ -14,4 +14,4 @@ In order, the strategies required for each of these Sudokus are:
 8. Box/line intersections (for real this time)
 9. Guessing
 
-`logic.sh` runs each of these tests on the `logical` algorithm up until one fails, assuming the project's already compiled. Because it's intended to verify correctness, not test performance, it also enables assertions.
+`logic.sh` runs each of these tests on the input algorithm up until one fails, assuming the project's already compiled. Because it's intended to verify correctness, not test performance, it also enables assertions. Takes the same arguments as `SudokuSolver`.

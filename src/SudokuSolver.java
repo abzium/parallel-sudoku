@@ -33,6 +33,13 @@ public class SudokuSolver {
                 logical.solve();
                 break;
 
+                
+            case "parallelLogical":
+                System.out.println("Running logical algorithm.");
+                ParallelLogical parallelLogical = new ParallelLogical(readFile(filename));
+                parallelLogical.solve();
+                break;
+
             default:
                 System.out.println("Please enter a valid algorithm (bruteforce, backtracking, logical).");
                 break;
