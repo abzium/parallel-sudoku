@@ -6,10 +6,10 @@ import java.util.concurrent.ForkJoinPool;
 public class SudokuSolver {
     public static final int ROWS = 9;
     public static final int COLS = 9;
-    public static long startTime = 0;
-    public static long endTime;
-    public static boolean success;
-    public static final int MAX_THREADS = 20; // Maximum number of threads to run for Parallel Backtracking algo
+    public static long startTime = 0; // Added by John
+    public static long endTime; // Added by John
+    public static boolean success; // Added by John
+    public static final int MAX_THREADS = 20; // Maximum number of threads to run for Parallel Backtracking algo; added by John
 
     public static void main(String[] args) {
         if (args.length != 2) {

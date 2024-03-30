@@ -7,14 +7,14 @@ import java.util.concurrent.ForkJoinPool;
 
 public class ParallelBacktracking extends RecursiveTask<Boolean> {
     private int[][] board;
-    public static int [][] solvedBoard;
-    private int depth; //Depth of recursion to stop calling new threads
-    public static final int SIZE = 9;
-    public static final int MAX_DEPTH = 4; // Maximum depth level
+    public static int [][] solvedBoard; // Holds completed board, to be printed
+    private int depth; // Depth of recursion to stop calling new threads
+    public static final int SIZE = 9; 
+    public static final int MAX_DEPTH = 7; // Maximum depth level
     public static final int MAX_THREADS = 20; // Maximum number of threads
 
     public ParallelBacktracking(int[][] board) {
-        this.board = deepCopyBoard(board);
+        this.board = deepCopyBoard(board); // Deep copy to avoid one threads board, from altering another
         this.depth = 0;
     }
 
@@ -25,7 +25,7 @@ public class ParallelBacktracking extends RecursiveTask<Boolean> {
 
     @Override
     protected Boolean compute() {
-        // Find the first empty cell
+        // Find the first empty cell of sudoku board
         int row = -1, col = -1;
         boolean emptyFound = false;
         for (int i = 0; i < board.length && !emptyFound; i++) {
@@ -51,9 +51,13 @@ public class ParallelBacktracking extends RecursiveTask<Boolean> {
                 
                 ParallelBacktracking task = new ParallelBacktracking(board, depth + 1);
                 
-                // Limit parallel execution depth or decide based on a condition
+                /*  
+                    Limits parallel execution based on thread depth and maximum amount of threads to be spawned
+                    If conditions hold, we will create a subtask for a thread, which will solve the board from that cell, using backtracking
+                    If conditions don't hold, we continue solving the board using normal backtracking
+                */ 
                 if (depth < MAX_DEPTH && ForkJoinPool.getCommonPoolParallelism() < MAX_THREADS) {
-                    task.fork(); // Run this task in parallel
+                    task.fork(); // Fork sub-taks and run this task in parallel
                     boolean result = task.join(); // Wait for the result
                     if (result) {
                         solvedBoard = board;
@@ -94,9 +98,10 @@ public class ParallelBacktracking extends RecursiveTask<Boolean> {
             }
         }
 
-        return true; // No violation found
+        return true; // No violation found, move is valid
     }
 
+    // Effectively Copies the current board for each respective thread
     private static int[][] deepCopyBoard(int[][] original) {
         int[][] copy = new int[original.length][original[0].length];
         for (int i = 0; i < original.length; i++) {
