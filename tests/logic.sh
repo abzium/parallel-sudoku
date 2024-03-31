@@ -4,6 +4,6 @@ for i in tests/logic*.in.txt; do
     echo "$i passed!"
   else
     echo "$i failed!"
-    break
+    exit 1
   fi
 done

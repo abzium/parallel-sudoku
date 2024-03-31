@@ -196,7 +196,7 @@ public class Logical {
    * Solves the grid in-place as much as possible.
    * <p>Assumes the {@link #candidates} have already been initialized; usually this means having called {@link #init}.
    * @param fallback The solver to fall back on when no more deductions can be made.
-   * @throws UnsolvableException If either a deduction was made that eliminates all possibilities, or the {@code fallback} failed to solve the Sudoku for any reason.
+   * @throws UnsolvableException If either some kind of contradiction was found, or the {@code fallback} failed to solve the Sudoku for any reason.
    */
   public void solve(FallbackSolver fallback) throws UnsolvableException {
     for (boolean[] row : rowDirtied) Arrays.fill(row, true);

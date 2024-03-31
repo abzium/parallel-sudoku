@@ -35,9 +35,15 @@ public class SudokuSolver {
 
                 
             case "parallelLogical":
-                System.out.println("Running logical algorithm.");
+                System.out.println("Running parallelized logical algorithm.");
                 ParallelLogical parallelLogical = new ParallelLogical(readFile(filename));
                 parallelLogical.solve();
+                break;
+
+            case "coordinatedLogical":
+                System.out.println("Running coordinated logical algorithm.");
+                CoordinatedLogical coordinatedLogical = new CoordinatedLogical(readFile(filename));
+                coordinatedLogical.solve();
                 break;
 
             default:

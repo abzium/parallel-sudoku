@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.concurrent.CountedCompleter;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 
 /**
  * @implNote Every deduction strategy (the {@code private} methods besides {@link #setValue}) has the following attributes:
@@ -17,14 +16,13 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
  *   nor actively attempt to solve cells outside the specified box (eliminating others' candidates is okay though)
  * <li>conversely, assumes no {@link #candidates} will be added or {@link #sudoku} cells will be removed during its execution
  * <li>returns {@code true} if any {@link #candidates} have been removed or {@link #sudoku} cells have been filled within the specified box.</ul>
- * Note that {@link #pointingBox} never attempts to modify the given box, instead eliminating candidates in the <em>other</em> boxes in its row/column,
- * so instead of returning anything it sets the appropriate {@code row}/{@code colDirtied} states directly.
+ * Note that {@link #pointingBox} never attempts to modify the given box, instead eliminating candidates in the <em>other</em> boxes in its row/column.
  * @implNote Also, the following conventions are adhered to within each method:
  * <ul><li>{@code i} and {@code j} refer to the column/row currently being modified.
  * <li>{@code i1} and {@code j1} (and so on) refer to the column/row being compared.
  * <li>{@code c} is the candidate being considered.</ul>
  */
-public class ParallelLogical {
+public class CoordinatedLogical {
   /**
    * Exception thrown to indicate when a Sudoku cannot be solved.
    */
@@ -106,15 +104,6 @@ public class ParallelLogical {
      * For cells with a nonzero {@link #sudoku} value {@code c}, the {@code c}th element must be {@code true} and other elements {@code false} (except possibly the {@code 0}th).
      */
     private final boolean[][][] candidates;
-    /**
-     * A {@code boolean} for each box in the grid, indicating whether its rows/columns have been modified since the last time {@link #doSolveStep} was called on it.
-     */
-    private final boolean[][] rowDirtied = new boolean[NUM_BOXES_Y][NUM_BOXES_X],
-      colDirtied = new boolean[NUM_BOXES_Y][NUM_BOXES_X];
-    
-    private final AtomicIntegerArray rowReaders = new AtomicIntegerArray(NUM_BOXES_Y),
-      colReaders = new AtomicIntegerArray(NUM_BOXES_X),
-      boxWriters = new AtomicIntegerArray(NUM_BOXES_Y * NUM_BOXES_X);
 
     /**
      * Constructs the solver.
@@ -201,7 +190,7 @@ public class ParallelLogical {
    *   Should not be modified externally, otherwise this solver could be in an inconsistent state.
    * @throws IllegalArgumentException If the {@code sudoku} grid isn't a square of size {@link #SIZE}.
    */
-  public ParallelLogical(int[][] sudoku) {
+  public CoordinatedLogical(int[][] sudoku) {
     this(sudoku, new boolean[SIZE][SIZE][SIZE + 1]);
     if (sudoku.length != SIZE)
       throw new IllegalArgumentException("wrong number of sudoku rows");
@@ -209,7 +198,7 @@ public class ParallelLogical {
       throw new IllegalArgumentException("wrong number of sudoku columns");
     for (boolean[][] row : state.candidates) for (boolean[] cell : row) Arrays.fill(cell, true);
   }
-  private ParallelLogical(int[][] sudoku, boolean[][][] candidates) {
+  private CoordinatedLogical(int[][] sudoku, boolean[][][] candidates) {
     assert candidates.length == SIZE : "wrong number of candidates rows";
     assert Arrays.stream(candidates).allMatch(row -> row.length == SIZE) : "wrong number of candidates columns";
     assert Arrays.stream(candidates).flatMap(Arrays::stream).allMatch(cell -> cell.length == SIZE + 1) : "wrong number of candidates entries";
@@ -248,9 +237,8 @@ public class ParallelLogical {
    * Initializes the solver. Need only be called once.
    * <p>Specifically, this:
    * <ul><li>updates the {@link #candidates} on solved cells by eliminating those that don't match the given,
-   * <li>clears each given from candidates in the rest of its row, column, and box,
-   * <li>checks if the givens conflict, and
-   * <li>dirties the entire grid.</ul>
+   * <li>clears each given from candidates in the rest of its row, column, and box, and
+   * <li>checks if the givens conflict.</ul>
    * Need only be called once, at initialization. Need only be called if there are any givens;
    * if there are, this must be called before {@link SubsolverTask#trySolve}, otherwise behavior is undefined.
    * @throws UnsolvableException If any givens directly conflict; i.e., if two of the same given are in the same row, column, or box.
@@ -266,8 +254,6 @@ public class ParallelLogical {
         }
       }
     }
-    for (boolean[] row : state.rowDirtied) Arrays.fill(row, true);
-    for (boolean[] row : state.colDirtied) Arrays.fill(row, true);
   }
 
   /**
@@ -285,10 +271,25 @@ public class ParallelLogical {
       this.state = state;
     }
 
+    private static final int MAX_NUM_BOXES = NUM_BOXES_Y > NUM_BOXES_X ? NUM_BOXES_Y : NUM_BOXES_X;
+
     @Override
     public void compute() {
-      // this also propagates exceptions; if this returns successfully, state's solved as much as it can be
-      invokeAll(Arrays.asList(new SubsolverTask(state), new SubsolverTask(state), new SubsolverTask(state)));
+      final SubsolverTask[] subsolvers = new SubsolverTask[NUM_BOXES_Y + NUM_BOXES_X];
+      final List<SubsolverTask> subsolverList = Arrays.asList(subsolvers);
+      for (int boxI = 0; boxI < NUM_BOXES_Y; boxI++) subsolvers[boxI] = new SubsolverTask(state, boxI, boxI % NUM_BOXES_X, true);
+      for (int boxJ = 0; boxJ < NUM_BOXES_X; boxJ++) subsolvers[NUM_BOXES_Y + boxJ] = new SubsolverTask(state, (boxJ + 1) % NUM_BOXES_Y, boxJ, false);
+
+      for (int cleanIters = 0; cleanIters < MAX_NUM_BOXES;) {
+        invokeAll(subsolverList);
+        cleanIters++;
+        for (SubsolverTask subsolver : subsolvers) {
+          if (subsolver.getRawResult()) cleanIters = 0;
+          subsolver.boxJ = (subsolver.boxJ + 1) % NUM_BOXES_X;
+          subsolver.reinitialize();
+        }
+      }
+
       final List<BoardState> states = FALLBACK.recurse(state);
       if (states == null) {
         CountedCompleter<?> root = getRoot();
@@ -314,111 +315,42 @@ public class ParallelLogical {
     }
   }
 
-  private static class SubsolverTask extends RecursiveTask<BoardState> {
+  private static class SubsolverTask extends RecursiveTask<Boolean> {
     private final BoardState state;
-
-    public SubsolverTask(BoardState state) {
-      this.state = state;
-    }
-
-    @Override
-    public BoardState compute() {
-      try {
-        trySolve();
-      } catch (UnsolvableException e) {
-        completeExceptionally(e);
-      }
-      return state;
-    }
+    private int boxI, boxJ;
+    private boolean isRow;
 
     /**
-     * Solves the grid in-place as much as possible.
-     * @throws UnsolvableException If some kind of contradiction was found.
-     */
-    public void trySolve() throws UnsolvableException {
-      boolean avoidBoxContention = true,
-        avoidLineContention = true;
-      while (true) {
-        boolean anyBoxContended = false, anyLineContended = false,
-          anyDirtied = false;
-        // rows and columns are separate loops to cycle through the rest of the boxes once before swinging back around for the column
-        for (int x = 0; x < NUM_BOXES_X; x++) {
-          for (int y = 0; y < NUM_BOXES_Y; y++) {
-            if (state.rowDirtied[y][x]) {
-              if (!state.boxWriters.compareAndSet(x + y*NUM_BOXES_X, 0, 1)) {
-                anyBoxContended = true;
-                if (avoidBoxContention) continue;
-                else state.boxWriters.getAndIncrement(x + y*NUM_BOXES_X);
-              }
-              try {
-                if (!state.rowReaders.compareAndSet(y, 0, 1)) {
-                  anyLineContended = true;
-                  if (avoidLineContention) continue;
-                  else state.rowReaders.getAndIncrement(y);
-                }
-                try {
-                  if (state.rowDirtied[y][x]) {
-                    doSolveStep(y, x, true);
-                    anyDirtied = true;
-                  }
-                } finally {
-                  state.rowReaders.getAndDecrement(y);
-                }
-              } finally {
-                state.boxWriters.getAndDecrement(x + y*NUM_BOXES_X);
-              }
-            }
-          }
-        }
-        for (int y = 0; y < NUM_BOXES_Y; y++) {
-          for (int x = 0; x < NUM_BOXES_X; x++) {
-            if (!state.boxWriters.compareAndSet(x + y*NUM_BOXES_X, 0, 1)) {
-              anyBoxContended = true;
-              if (avoidBoxContention) continue;
-              else state.boxWriters.getAndIncrement(x + y*NUM_BOXES_X);
-            }
-            try {
-              if (!state.colReaders.compareAndSet(x, 0, 1)) {
-                anyLineContended = true;
-                if (avoidLineContention) continue;
-                else state.colReaders.getAndIncrement(x);
-              }
-              try {
-                if (state.colDirtied[y][x]) {
-                  doSolveStep(y, x, false);
-                  anyDirtied = true;
-                }
-              } finally {
-                state.colReaders.getAndDecrement(x);
-              }
-            } finally {
-              state.boxWriters.getAndDecrement(x + y*NUM_BOXES_X);
-            }
-          }
-        }
-        if (anyDirtied) {
-          avoidLineContention = true;
-          avoidBoxContention = true;
-        } else {
-          if (avoidLineContention && anyLineContended) avoidLineContention = false;
-          else if (avoidBoxContention && anyBoxContended) {
-            avoidBoxContention = false; avoidLineContention = true;
-          } else break;
-        }
-      }
-    }
-
-    /**
-     * Attempts to make each type of logical deduction, focusing on a single box and its row/column.
+     * Constructs a task that attempts to make logical deductions focusing on a single box and its row/column.
+     * @param state The state to base this on.
      * @param boxI The index of the box vertically, from 0 (inclusive) to {@link #NUM_BOXES_Y} (exclusive).
      * @param boxJ The index of the box horizontally, from 0 (inclusive) to {@link #NUM_BOXES_X} (exclusive).
      * @param isRow {@code true} to scan along the row, {@code false} for the column.
-     * @throws UnsolvableException If any cells in the given box ran out of candidates.
      */
-    void doSolveStep(int boxI, int boxJ, boolean isRow) throws UnsolvableException {
+    public SubsolverTask(BoardState state, int boxI, int boxJ, boolean isRow) {
+      this.state = state;
+      this.boxI = boxI;
+      this.boxJ = boxJ;
+      this.isRow = isRow;
+    }
+
+    @Override
+    public Boolean compute() {
+      try {
+        return doSolveStep();
+      } catch (UnsolvableException e) {
+        completeExceptionally(e);
+      }
+      return false;
+    }
+
+    /**
+     * Attempts to make each type of logical deduction.
+     * @throws UnsolvableException If some kind of contradiction was found.
+     */
+    boolean doSolveStep() throws UnsolvableException {
       final int minX = boxJ * BOX_WIDTH, maxX = minX + BOX_WIDTH,
         minY = boxI * BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
-      (isRow ? state.rowDirtied : state.colDirtied)[boxI][boxJ] = false;
       boolean dirtied = false;
       dirtied |= nakedSinglesBox(minY, maxY, minX, maxX);
       dirtied |= isRow ? hiddenSinglesRows(minY, maxY, minX, maxX) : hiddenSinglesCols(minY, maxY, minX, maxX);
@@ -428,16 +360,8 @@ public class ParallelLogical {
       dirtied |= isRow ? hiddenPairsRows(minY, maxY, minX, maxX) : hiddenPairsCols(minY, maxY, minX, maxX);
       dirtied |= hiddenPairsBox(minY, maxY, minX, maxX);
       dirtied |= isRow ? boxLineRows(minY, maxY, minX, maxX) : boxLineCols(minY, maxY, minX, maxX);
-      pointingBox(minY, maxY, minX, maxX);
-      if (dirtied) {
-        // also set both dirtied states for this box, because we'll need to do a second pass
-        // in case we eliminated enough to create a single and we can now fill something in.
-        // or we eliminated enough for a pair and can eliminate. etc.
-        for (int i1 = 0; i1 < NUM_BOXES_Y; i1++) {
-          state.colDirtied[i1][boxJ] = true;
-        }
-        Arrays.fill(state.rowDirtied[boxI], true);
-      }
+      dirtied |= pointingBox(minY, maxY, minX, maxX);
+      return dirtied;
     }
 
     // Fills in cells that have only one candidate value.
@@ -698,7 +622,6 @@ public class ParallelLogical {
                   if (state.candidates[i][j][c] || state.candidates[i][otherJ][c]) {
                     state.candidates[i][j][c] = false;
                     state.candidates[i][otherJ][c] = false;
-                    state.colDirtied[i/BOX_HEIGHT][otherJ/BOX_WIDTH] = true;
                     dirtied = true;
                   }
                 }
@@ -738,7 +661,6 @@ public class ParallelLogical {
                   if (state.candidates[i][j][c] || state.candidates[otherI][j][c]) {
                     state.candidates[i][j][c] = false;
                     state.candidates[otherI][j][c] = false;
-                    state.rowDirtied[otherI/BOX_HEIGHT][j/BOX_WIDTH] = true;
                     dirtied = true;
                   }
                 }
@@ -858,7 +780,8 @@ public class ParallelLogical {
     }
 
     // Looks for candidates whose only cells in this box are in the same row/column, and eliminates them from other cells in that row/column.
-    private void pointingBox(int minY, int maxY, int minX, int maxX) {
+    private boolean pointingBox(int minY, int maxY, int minX, int maxX) {
+      boolean dirtied = false;
       // for each row,
       for (int i = minY; i < maxY; i++) {
         // for each candidate,
@@ -877,9 +800,7 @@ public class ParallelLogical {
             if (j >= minX && j < maxX) continue;
             if (state.candidates[i][j][c]) {
               state.candidates[i][j][c] = false;
-              state.rowDirtied[i/BOX_HEIGHT][j/BOX_WIDTH] = true;
-              state.colDirtied[i/BOX_HEIGHT][j/BOX_WIDTH] = true;
-              state.rowDirtied[minY/BOX_HEIGHT][minX/BOX_WIDTH] = true;
+              dirtied = true;
             }
           }
         }
@@ -902,13 +823,12 @@ public class ParallelLogical {
             if (i >= minY && i < maxY) continue;
             if (state.candidates[i][j][c]) {
               state.candidates[i][j][c] = false;
-              state.rowDirtied[i/BOX_HEIGHT][j/BOX_WIDTH] = true;
-              state.colDirtied[i/BOX_HEIGHT][j/BOX_WIDTH] = true;
-              state.colDirtied[minY/BOX_HEIGHT][minX/BOX_WIDTH] = true;
+              dirtied = true;
             }
           }
         }
       }
+      return dirtied;
     }
   }
 }
