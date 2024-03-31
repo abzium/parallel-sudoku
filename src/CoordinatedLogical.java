@@ -206,7 +206,7 @@ public class CoordinatedLogical {
   }
 
   /**
-   * Solves the grid in-place as much as possible, using {@link FallbackSolver#guessAndCheck} when no more deductions can be made.
+   * Solves the grid in-place as much as possible, using {@link #FALLBACK} when no more deductions can be made.
    * When there is no solution, this prints as much of the grid as could be determined along with the remaining candidates;
    * when there are multiple, this prints any one of the solutions.
    */
@@ -214,8 +214,9 @@ public class CoordinatedLogical {
     try {
       init();
       final ForkJoinPool pool = ForkJoinPool.commonPool();
+      final BoardState state;
       try {
-        state = pool.invoke(new SolverTask(state));
+        state = pool.invoke(new SolverTask(this.state));
       } catch (RuntimeException e) {
         for (Throwable thr = e; thr != null; thr = thr.getCause())
           if (thr instanceof UnsolvableException)
@@ -225,11 +226,13 @@ public class CoordinatedLogical {
       } finally {
         pool.shutdownNow();
       }
+      if (state == null) throw new UnsolvableException("no guess worked!");
+      this.state = state;
     } catch (UnsolvableException e) {
       System.out.println("The sudoku couldn't be solved!");
       if (e.getMessage() != null) System.out.println("Reason: " + e.getMessage());
     } finally {
-      state.print();
+      this.state.print();
     }
   }
 
@@ -297,6 +300,7 @@ public class CoordinatedLogical {
         ((SolverTask)root).state = state;
         root.quietlyComplete();
       } else {
+        this.state = null;
         setPendingCount(states.size());
         for (BoardState state : states) {
           new SolverTask(this, state).fork();
