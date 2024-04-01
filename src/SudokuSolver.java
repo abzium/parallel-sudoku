@@ -9,7 +9,8 @@ public class SudokuSolver {
     public static long startTime = 0; // Added by John
     public static long endTime; // Added by John
     public static boolean success; // Added by John
-    public static final int MAX_THREADS = 20; // Maximum number of threads to run for Parallel Backtracking algo; added by John
+    public static final int MAX_THREADS = 20; // Maximum number of threads to run for Parallel Backtracking algo; added
+                                              // by John
 
     public static void main(String[] args) {
         if (args.length != 2) {
@@ -21,11 +22,24 @@ public class SudokuSolver {
 
         // Decide algorithm based on argument
         switch (algorithm) {
-            case "bruteforce":
-                System.out.println("Running brute force algorithm.");
-                BruteForce bruteForce = new BruteForce(readFile(filename));
-                // int[][] solved = bruteForce.solve();
-                // printSudoku(solved);
+            case "simAnnealing":
+                startTime = System.currentTimeMillis();
+                System.out.println("Running simulated annealing algorithm.");
+                SimAnnealing simAnnealing = new SimAnnealing(readFile(filename));
+                simAnnealing.solve();
+                endTime = System.currentTimeMillis();
+                System.out.println(
+                        "Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+                break;
+
+            case "parallelSimAnnealing":
+                startTime = System.currentTimeMillis();
+                System.out.println("Running parallel simulated annealing algorithm.");
+                ParallelSimAnnealing parallelSimAnnealing = new ParallelSimAnnealing(readFile(filename));
+                parallelSimAnnealing.solve();
+                endTime = System.currentTimeMillis();
+                System.out.println(
+                        "Run time solving board on multiple threads: " + (endTime - startTime) + " milliseconds.");
                 break;
 
             case "backtracking":
@@ -33,26 +47,29 @@ public class SudokuSolver {
                 Backtracking backtracking = new Backtracking(readFile(filename));
                 startTime = System.currentTimeMillis();
                 success = backtracking.solve();
-                if(success)
+                if (success)
                     printSudoku(backtracking.getBoard());
                 else
                     System.out.println("Unsolvable board");
                 endTime = System.currentTimeMillis();
-                System.out.println("Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+                System.out.println(
+                        "Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
                 break;
 
             case "parallelizedBacktracking":
                 System.out.println("Running parallelized backtracking algorithm");
                 ParallelBacktracking parallelizedBacktracking = new ParallelBacktracking(readFile(filename));
                 startTime = System.currentTimeMillis();
-                ForkJoinPool pool = new ForkJoinPool(MAX_THREADS); // Incorporating in here allows more control over lifecycle of thread pool
+                ForkJoinPool pool = new ForkJoinPool(MAX_THREADS); // Incorporating in here allows more control over
+                                                                   // lifecycle of thread pool
                 success = pool.invoke(parallelizedBacktracking);
-                if(success)
+                if (success)
                     printSudoku(ParallelBacktracking.getBoard());
                 else
                     System.out.println("Unsolvable board");
                 endTime = System.currentTimeMillis();
-                System.out.println("Run time solving board on multiple threads: " + (endTime - startTime) + " milliseconds.");
+                System.out.println(
+                        "Run time solving board on multiple threads: " + (endTime - startTime) + " milliseconds.");
                 break;
 
             case "logical":
@@ -61,17 +78,18 @@ public class SudokuSolver {
                 startTime = System.currentTimeMillis();
                 logical.solve();
                 endTime = System.currentTimeMillis();
-                System.out.println("Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+                System.out.println(
+                        "Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
                 break;
 
-                
             case "parallelLogical":
                 System.out.println("Running parallelized logical algorithm.");
                 ParallelLogical parallelLogical = new ParallelLogical(readFile(filename));
                 startTime = System.currentTimeMillis();
                 parallelLogical.solve();
                 endTime = System.currentTimeMillis();
-                System.out.println("Run time solving board on multiple independent threads: " + (endTime - startTime) + " milliseconds.");
+                System.out.println("Run time solving board on multiple independent threads: " + (endTime - startTime)
+                        + " milliseconds.");
                 break;
 
             case "coordinatedLogical":
@@ -80,7 +98,8 @@ public class SudokuSolver {
                 startTime = System.currentTimeMillis();
                 coordinatedLogical.solve();
                 endTime = System.currentTimeMillis();
-                System.out.println("Run time solving board on multiple coordinated threads: " + (endTime - startTime) + " milliseconds.");
+                System.out.println("Run time solving board on multiple coordinated threads: " + (endTime - startTime)
+                        + " milliseconds.");
                 break;
 
             default:
