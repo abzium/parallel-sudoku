@@ -21,10 +21,18 @@ public class BruteForce {
                 fixedSudoku[i] = sudoku[i].clone();
             }
             fixSudokuValues(fixedSudoku);
+            // fixedSudoku now shows which cells are fixed
             ArrayList<ArrayList<ArrayList<Integer>>> listBlocks = create3x3Blocks();
+
+            // Randomly fill 3x3 squares so that each number doesn't appear in the square
+            // more than once
             int[][] tmpSudoku = randomlyFill3x3Blocks(sudoku, listBlocks);
 
+            // What is the sigma used for?
+            // Sigma is multiplied by the cooling rate to make it go down
+            // sigma is added to 2 to make it go up
             double sigma = calculateInitialSigma(sudoku, fixedSudoku, listBlocks);
+
             int score = calculateNumberOfErrors(convert2dArray(tmpSudoku));
             int iterations = chooseNumberOfIterations(fixedSudoku);
             if (score <= 0) {
@@ -33,6 +41,7 @@ public class BruteForce {
 
             while (!solutionFound) {
                 int previousScore = score;
+                // System.out.println("Score: " + previousScore);
                 for (int i = 0; i < iterations; i++) {
                     ArrayList<ArrayList<ArrayList<Integer>>> newState = chooseNewState(tmpSudoku, fixedSudoku,
                             listBlocks, sigma);
@@ -44,7 +53,7 @@ public class BruteForce {
                     }
                     int scoreDiff = newState.get(1).get(0).get(0);
                     score += scoreDiff;
-                    System.out.println(score);
+                    // System.out.println(score);
                     if (score <= 0) {
                         solutionFound = true;
                         break;
@@ -73,33 +82,6 @@ public class BruteForce {
 
         return sudoku;
     }
-
-    // private boolean isValid(int row, int col, int num) {
-    // // Check if a number does not violate the rules
-    // // Check the row for violations
-    // for (int i = 0; i < size; i++) {
-    // if (sudoku[row][i] == num)
-    // return false;
-    // }
-    // // Check column for violations
-    // for (int i = 0; i < size; i++) {
-    // if (sudoku[i][col] == num)
-    // return false;
-    // }
-    // // Check 3x3 square for violations
-    // // Get top right corner of square
-    // int squareSize = (int) Math.sqrt(size);
-    // int rowSquare = (row / squareSize) * squareSize;
-    // int colSquare = (col / squareSize) * squareSize;
-    // for (int i = rowSquare; i < rowSquare + squareSize; i++) {
-    // for (int j = colSquare; j < colSquare + squareSize; j++) {
-    // if (sudoku[i][j] == num)
-    // return false;
-    // }
-    // }
-    //
-    // return true;
-    // }
 
     private ArrayList<Integer> getMissingNumbers(ArrayList<Integer> row) {
         // Returns the missing numbers in a row
@@ -167,13 +149,17 @@ public class BruteForce {
     private ArrayList<ArrayList<ArrayList<Integer>>> proposedState(ArrayList<ArrayList<Integer>> sudoku,
             int[][] fixedSudoku,
             ArrayList<ArrayList<ArrayList<Integer>>> listBlocks) {
+        // RNG
         Random rand = new Random();
+        // Choose a random 3x3 square
         ArrayList<ArrayList<Integer>> randomBlock = listBlocks.get(rand.nextInt(listBlocks.size()));
 
         if (sumOfOneBlock(fixedSudoku, randomBlock) > 6) {
             // return sudoku, 1, 1. TODO: fix code
         }
+
         ArrayList<ArrayList<Integer>> boxesToFlip = twoRandomBoxesWithinBlock(fixedSudoku, randomBlock);
+
         ArrayList<ArrayList<Integer>> proposedSudoku = FlipBoxes(sudoku, boxesToFlip);
         ArrayList<ArrayList<ArrayList<Integer>>> proposedStateArray = new ArrayList<>();
         proposedStateArray.add(proposedSudoku);
@@ -192,13 +178,21 @@ public class BruteForce {
 
     private ArrayList<ArrayList<Integer>> twoRandomBoxesWithinBlock(int[][] fixedSudoku,
             ArrayList<ArrayList<Integer>> block) {
+        // Returns the coordinate pairs of two randomly selected boxes within a given
+        // 3x3 block
+        // Block: list of 9 coordinate pairs representing the coordinates of all the
+        // boxes in a 3x3 block
         while (true) {
             ArrayList<Integer> firstBox = new ArrayList<>();
             Random rand = new Random();
             int randomIndex = rand.nextInt(block.size());
+
             firstBox = block.get(randomIndex);
+
             ArrayList<Integer> secondBox = new ArrayList<>();
+
             ArrayList<ArrayList<Integer>> secondBoxChoices = new ArrayList<>();
+
             for (int i = 0; i < block.size(); i++) {
                 if (i != randomIndex) {
                     secondBoxChoices.add(block.get(i));
@@ -286,12 +280,13 @@ public class BruteForce {
     }
 
     private double popStdDev(ArrayList<Integer> list) {
+        // Returns population standard deviation
         double sum = 0.0;
         for (int i : list) {
             sum += i;
         }
-
         int length = list.size();
+
         double mean = sum / length;
 
         double standardDeviation = 0.0;
@@ -303,7 +298,8 @@ public class BruteForce {
 
     private double calculateInitialSigma(int[][] sudoku, int[][] fixedSudoku,
             ArrayList<ArrayList<ArrayList<Integer>>> listBlocks) {
-
+        // The initial sigma value is chosen by calculating the population standard
+        // deviation of the error count of 10 proposed states
         ArrayList<Integer> listOfDifferences = new ArrayList<>();
         ArrayList<ArrayList<Integer>> tmpSudoku = convert2dArray(sudoku);
 
@@ -316,10 +312,11 @@ public class BruteForce {
     }
 
     private int chooseNumberOfIterations(int[][] fixedSudoku) {
+        // The number of iterations == the number of free cells
         int numberOfIterations = 0;
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 9; j++) {
-                if (fixedSudoku[i][j] != 0) {
+                if (fixedSudoku[i][j] == 0) {
                     numberOfIterations += 1;
                 }
             }
@@ -342,8 +339,10 @@ public class BruteForce {
     private ArrayList<ArrayList<ArrayList<Integer>>> chooseNewState(int[][] currentSudoku, int[][] fixedSudoku,
             ArrayList<ArrayList<ArrayList<Integer>>> listOfBlocks, double sigma) {
 
+        // Get a proposed state with two random flipped boxes
         ArrayList<ArrayList<ArrayList<Integer>>> proposal = proposedState(convert2dArray(currentSudoku), fixedSudoku,
                 listOfBlocks);
+        // Extract data
         ArrayList<ArrayList<Integer>> newSudoku = proposal.get(0);
         ArrayList<ArrayList<Integer>> boxesToCheck = proposal.get(1);
         int boxes_00 = boxesToCheck.get(0).get(0);
@@ -351,43 +350,35 @@ public class BruteForce {
         int boxes_10 = boxesToCheck.get(1).get(0);
         int boxes_11 = boxesToCheck.get(1).get(1);
 
+        // How many errors are in the row and column of the two boxes combined?
         int currentCost = calculateNumberOfErrorsRowColumn(boxes_00, boxes_01, convert2dArray(currentSudoku))
                 + calculateNumberOfErrorsRowColumn(boxes_10, boxes_11, convert2dArray(currentSudoku));
+
+        // How many errors are in that row and column of the two boxes on the proposed
+        // board?
         int newCost = calculateNumberOfErrorsRowColumn(boxes_00, boxes_01, newSudoku)
                 + calculateNumberOfErrorsRowColumn(boxes_10, boxes_11, newSudoku);
+
         int costDifference = newCost - currentCost;
         double rho = Math.exp(-costDifference / sigma);
         ArrayList<ArrayList<ArrayList<Integer>>> newState = new ArrayList<>();
         Random rand = new Random();
+        // If the cost difference is negative (the new board has less errors)
+        // then definitely choose that one. Otherwise have a chance of choosing the new
+        // one.
+        // higher positive CD and lower sigma lessen the chances and chooses the more
+        // greedy
         if (rand.nextDouble(1.0) < rho) {
             newState.add(newSudoku);
-            // wrapping time
-            ArrayList<Integer> cd = new ArrayList<>();
-            cd.add(costDifference);
-            ArrayList<ArrayList<Integer>> wrap = new ArrayList<>();
-            wrap.add(cd);
-            newState.add(wrap);
-            return newState;
+        } else {
+            newState.add(convert2dArray(currentSudoku));
+            costDifference = 0;
         }
-        newState.add(convert2dArray(currentSudoku));
         ArrayList<Integer> cd = new ArrayList<>();
-        cd.add(0);
+        cd.add(costDifference);
         ArrayList<ArrayList<Integer>> wrap = new ArrayList<>();
         wrap.add(cd);
         newState.add(wrap);
         return newState;
-    }
-
-    private void printSudoku(int[][] sudoku) {
-        for (int i = 0; i < 9; i++) {
-            for (int j = 0; j < 9; j++) {
-                if (j % 3 == 0 && j != 0)
-                    System.out.print(" |");
-                System.out.print(" " + sudoku[i][j]);
-            }
-            System.out.print('\n');
-            if (i % 3 == 2 && i != 8)
-                System.out.println("-------|-------|-------");
-        }
     }
 }
