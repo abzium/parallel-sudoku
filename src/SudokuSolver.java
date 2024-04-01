@@ -1,6 +1,7 @@
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.Scanner;
+import java.util.concurrent.ForkJoinPool;
 
 public class SudokuSolver {
     public static final int ROWS = 9;
@@ -44,13 +45,61 @@ public class SudokuSolver {
             case "backtracking":
                 System.out.println("Running backtracking algorithm.");
                 Backtracking backtracking = new Backtracking(readFile(filename));
-                backtracking.solve();
+                startTime = System.currentTimeMillis();
+                success = backtracking.solve();
+                if (success)
+                    printSudoku(backtracking.getBoard());
+                else
+                    System.out.println("Unsolvable board");
+                endTime = System.currentTimeMillis();
+                System.out.println(
+                        "Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+                break;
+
+            case "parallelizedBacktracking":
+                System.out.println("Running parallelized backtracking algorithm");
+                ParallelBacktracking parallelizedBacktracking = new ParallelBacktracking(readFile(filename));
+                startTime = System.currentTimeMillis();
+                ForkJoinPool pool = new ForkJoinPool(MAX_THREADS); // Incorporating in here allows more control over
+                                                                   // lifecycle of thread pool
+                success = pool.invoke(parallelizedBacktracking);
+                if (success)
+                    printSudoku(ParallelBacktracking.getBoard());
+                else
+                    System.out.println("Unsolvable board");
+                endTime = System.currentTimeMillis();
+                System.out.println(
+                        "Run time solving board on multiple threads: " + (endTime - startTime) + " milliseconds.");
                 break;
 
             case "logical":
                 System.out.println("Running logical algorithm.");
                 Logical logical = new Logical(readFile(filename));
+                startTime = System.currentTimeMillis();
                 logical.solve();
+                endTime = System.currentTimeMillis();
+                System.out.println(
+                        "Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+                break;
+
+            case "parallelLogical":
+                System.out.println("Running parallelized logical algorithm.");
+                ParallelLogical parallelLogical = new ParallelLogical(readFile(filename));
+                startTime = System.currentTimeMillis();
+                parallelLogical.solve();
+                endTime = System.currentTimeMillis();
+                System.out.println("Run time solving board on multiple independent threads: " + (endTime - startTime)
+                        + " milliseconds.");
+                break;
+
+            case "coordinatedLogical":
+                System.out.println("Running coordinated logical algorithm.");
+                CoordinatedLogical coordinatedLogical = new CoordinatedLogical(readFile(filename));
+                startTime = System.currentTimeMillis();
+                coordinatedLogical.solve();
+                endTime = System.currentTimeMillis();
+                System.out.println("Run time solving board on multiple coordinated threads: " + (endTime - startTime)
+                        + " milliseconds.");
                 break;
 
             default:
@@ -67,7 +116,6 @@ public class SudokuSolver {
 
         try {
             fileScan = new Scanner(sudokuFile);
-
         } catch (FileNotFoundException e) {
             System.out.println("Sudoku file not found!");
             System.exit(1);
