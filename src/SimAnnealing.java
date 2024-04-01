@@ -2,16 +2,16 @@ import java.lang.Math;
 import java.util.ArrayList;
 import java.util.Random;
 
-public class BruteForce {
+public class SimAnnealing {
     int[][] sudoku;
     int size;
 
-    public BruteForce(int[][] sudoku) {
+    public SimAnnealing(int[][] sudoku) {
         this.sudoku = sudoku;
         this.size = sudoku.length;
     }
 
-    public int[][] solve() {
+    public void solve() {
         boolean solutionFound = false;
         while (!solutionFound) {
             double coolingRate = 0.99;
@@ -80,7 +80,7 @@ public class BruteForce {
             }
         }
 
-        return sudoku;
+        printSudoku(sudoku);
     }
 
     private ArrayList<Integer> getMissingNumbers(ArrayList<Integer> row) {
@@ -380,5 +380,18 @@ public class BruteForce {
         wrap.add(cd);
         newState.add(wrap);
         return newState;
+    }
+
+    private void printSudoku(int[][] sudoku) {
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (j % 3 == 0 && j != 0)
+                    System.out.print(" |");
+                System.out.print(" " + sudoku[i][j]);
+            }
+            System.out.print('\n');
+            if (i % 3 == 2 && i != 8)
+                System.out.println("-------|-------|-------");
+        }
     }
 }

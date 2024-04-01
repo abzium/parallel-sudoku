@@ -5,6 +5,11 @@ import java.util.Scanner;
 public class SudokuSolver {
     public static final int ROWS = 9;
     public static final int COLS = 9;
+    public static long startTime = 0; // Added by John
+    public static long endTime; // Added by John
+    public static boolean success; // Added by John
+    public static final int MAX_THREADS = 20; // Maximum number of threads to run for Parallel Backtracking algo; added
+                                              // by John
 
     public static void main(String[] args) {
         if (args.length != 2) {
@@ -16,11 +21,24 @@ public class SudokuSolver {
 
         // Decide algorithm based on argument
         switch (algorithm) {
-            case "bruteforce":
-                System.out.println("Running brute force algorithm.");
-                BruteForce bruteForce = new BruteForce(readFile(filename));
-                int[][] solved = bruteForce.solve();
-                printSudoku(solved);
+            case "simAnnealing":
+                startTime = System.currentTimeMillis();
+                System.out.println("Running simulated annealing algorithm.");
+                SimAnnealing simAnnealing = new SimAnnealing(readFile(filename));
+                simAnnealing.solve();
+                endTime = System.currentTimeMillis();
+                System.out.println(
+                        "Run time solving board on single thread: " + (endTime - startTime) + " milliseconds.");
+                break;
+
+            case "parallelSimAnnealing":
+                startTime = System.currentTimeMillis();
+                System.out.println("Running parallel simulated annealing algorithm.");
+                ParallelSimAnnealing parallelSimAnnealing = new ParallelSimAnnealing(readFile(filename));
+                parallelSimAnnealing.solve();
+                endTime = System.currentTimeMillis();
+                System.out.println(
+                        "Run time solving board on multiple threads: " + (endTime - startTime) + " milliseconds.");
                 break;
 
             case "backtracking":
