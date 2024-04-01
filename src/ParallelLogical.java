@@ -8,21 +8,10 @@ import java.util.concurrent.RecursiveTask;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 /**
- * @implNote Every deduction strategy (the {@code private} methods besides {@link #setValue}) has the following attributes:
- * <ul><li>name ending in {@code Cols}, {@code Rows}, or {@code Box},
- *   indicating whether it scans across the {@link #BOX_WIDTH} columns the box occupies, the {@link #BOX_HEIGHT} rows, or just the box itself
- * <li>parameters {@code (minY, maxY, minX, maxX)}, with {@code min}s inclusive and {@code max}es exclusive,
- *   indicating the box of cells to be modified
- * <li>does <em>not</em> add additional {@link #candidates} or remove solved {@link #sudoku} cells,
- *   nor actively attempt to solve cells outside the specified box (eliminating others' candidates is okay though)
- * <li>conversely, assumes no {@link #candidates} will be added or {@link #sudoku} cells will be removed during its execution
- * <li>returns {@code true} if any {@link #candidates} have been removed or {@link #sudoku} cells have been filled within the specified box.</ul>
- * Note that {@link #pointingBox} never attempts to modify the given box, instead eliminating candidates in the <em>other</em> boxes in its row/column,
- * so instead of returning anything it sets the appropriate {@code row}/{@code colDirtied} states directly.
- * @implNote Also, the following conventions are adhered to within each method:
- * <ul><li>{@code i} and {@code j} refer to the column/row currently being modified.
- * <li>{@code i1} and {@code j1} (and so on) refer to the column/row being compared.
- * <li>{@code c} is the candidate being considered.</ul>
+ * Solves the grid using multiple threads.
+ * <p>
+ * The distinction between this and {@link CoordinatedLogical} is that this has the SubsolverTasks not directly coordinating with each other,
+ * instead using AtomicInteger flags to loosely avoid working on the same boxes and lines.
  */
 public class ParallelLogical {
   /**
@@ -111,7 +100,7 @@ public class ParallelLogical {
      */
     private final boolean[][] rowDirtied = new boolean[NUM_BOXES_Y][NUM_BOXES_X],
       colDirtied = new boolean[NUM_BOXES_Y][NUM_BOXES_X];
-    
+
     private final AtomicIntegerArray rowReaders = new AtomicIntegerArray(NUM_BOXES_Y),
       colReaders = new AtomicIntegerArray(NUM_BOXES_X),
       boxWriters = new AtomicIntegerArray(NUM_BOXES_Y * NUM_BOXES_X);
@@ -158,7 +147,7 @@ public class ParallelLogical {
         if ((i+1) % BOX_HEIGHT == 0) System.out.println();
       }
     }
-    
+
     void setValue(int i, int j, int c) {
       final int minX = j/BOX_WIDTH*BOX_WIDTH, maxX = minX + BOX_WIDTH,
         minY = i/BOX_HEIGHT*BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
@@ -314,10 +303,28 @@ public class ParallelLogical {
     }
     @Override
     public boolean onExceptionalCompletion(Throwable ex, CountedCompleter<?> caller) {
-      return !(getCompleter() instanceof SolverTask);
+      assert getCompleter() instanceof SolverTask;
+      return false;
     }
   }
 
+  /**
+   * @implNote Every deduction strategy (the {@code private} methods besides {@link #setValue}) has the following attributes:
+   * <ul><li>name ending in {@code Cols}, {@code Rows}, or {@code Box},
+   *   indicating whether it scans across the {@link #BOX_WIDTH} columns the box occupies, the {@link #BOX_HEIGHT} rows, or just the box itself
+   * <li>parameters {@code (minY, maxY, minX, maxX)}, with {@code min}s inclusive and {@code max}es exclusive,
+   *   indicating the box of cells to be modified
+   * <li>does <em>not</em> add additional {@link BoardState#candidates} or remove solved {@link BoardState#sudoku} cells,
+   *   nor actively attempt to solve cells outside the specified box (eliminating others' candidates is okay though)
+   * <li>conversely, assumes no {@link BoardState#candidates} will be added or {@link BoardState#sudoku} cells will be removed during its execution
+   * <li>returns {@code true} if any {@link BoardState#candidates} have been removed or {@link BoardState#sudoku} cells have been filled within the specified box.</ul>
+   * Note that {@link #pointingBox} never attempts to modify the given box, instead eliminating candidates in the <em>other</em> boxes in its row/column,
+   * so instead of returning anything it sets the appropriate {@code row}/{@code colDirtied} states directly.
+   * @implNote Also, the following conventions are adhered to within each method:
+   * <ul><li>{@code i} and {@code j} refer to the column/row currently being modified.
+   * <li>{@code i1} and {@code j1} (and so on) refer to the column/row being compared.
+   * <li>{@code c} is the candidate being considered.</ul>
+   */
   private static class SubsolverTask extends RecursiveTask<BoardState> {
     private final BoardState state;
 

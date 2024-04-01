@@ -7,20 +7,10 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 
 /**
- * @implNote Every deduction strategy (the {@code private} methods besides {@link #setValue}) has the following attributes:
- * <ul><li>name ending in {@code Cols}, {@code Rows}, or {@code Box},
- *   indicating whether it scans across the {@link #BOX_WIDTH} columns the box occupies, the {@link #BOX_HEIGHT} rows, or just the box itself
- * <li>parameters {@code (minY, maxY, minX, maxX)}, with {@code min}s inclusive and {@code max}es exclusive,
- *   indicating the box of cells to be modified
- * <li>does <em>not</em> add additional {@link #candidates} or remove solved {@link #sudoku} cells,
- *   nor actively attempt to solve cells outside the specified box (eliminating others' candidates is okay though)
- * <li>conversely, assumes no {@link #candidates} will be added or {@link #sudoku} cells will be removed during its execution
- * <li>returns {@code true} if any {@link #candidates} have been removed or {@link #sudoku} cells have been filled within the specified box.</ul>
- * Note that {@link #pointingBox} never attempts to modify the given box, instead eliminating candidates in the <em>other</em> boxes in its row/column.
- * @implNote Also, the following conventions are adhered to within each method:
- * <ul><li>{@code i} and {@code j} refer to the column/row currently being modified.
- * <li>{@code i1} and {@code j1} (and so on) refer to the column/row being compared.
- * <li>{@code c} is the candidate being considered.</ul>
+ * Solves the grid using multiple threads.
+ * <p>
+ * The distinction between this and {@link ParallelLogical} is that this has the SubsolverTasks directly coordinating with one another,
+ * because the SolverTask controls their flow of execution between different boxes.
  */
 public class CoordinatedLogical {
   /**
@@ -147,7 +137,7 @@ public class CoordinatedLogical {
         if ((i+1) % BOX_HEIGHT == 0) System.out.println();
       }
     }
-    
+
     void setValue(int i, int j, int c) {
       final int minX = j/BOX_WIDTH*BOX_WIDTH, maxX = minX + BOX_WIDTH,
         minY = i/BOX_HEIGHT*BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
@@ -274,8 +264,15 @@ public class CoordinatedLogical {
       this.state = state;
     }
 
-    private static final int MAX_NUM_BOXES = NUM_BOXES_Y > NUM_BOXES_X ? NUM_BOXES_Y : NUM_BOXES_X;
+    private static final int MAX_NUM_BOXES = Math.max(NUM_BOXES_X, NUM_BOXES_Y);
 
+    /**
+     * Spawns {@link SubsolverTask}s to make as many deductions as possible, then recursively spawns new SolverTasks if that didn't solve the board.
+     * <p>Specifically, has the following behavior:
+     * <ul><li>If a contradiction was found by a SubsolverTask, this completes exceptionally with that exception, but does <i>not</i> propagate it to a parent SolverTask.
+     * <li>If the board was solved by deductions made by the SubsolverTasks, this completes the root SolverTask (as well as this one).
+     * <li>Otherwise, if this wasn't cancelled or completed by some SolverTask solving the board, this completes when all SolverTasks it spawned have completed (exceptionally).</ul>
+     */
     @Override
     public void compute() {
       final SubsolverTask[] subsolvers = new SubsolverTask[NUM_BOXES_Y + NUM_BOXES_X];
@@ -295,7 +292,7 @@ public class CoordinatedLogical {
 
       final List<BoardState> states = FALLBACK.recurse(state);
       if (states == null) {
-        CountedCompleter<?> root = getRoot();
+        final CountedCompleter<?> root = getRoot();
         assert root instanceof SolverTask : "unexpected root class " + root.getClass().getName();
         ((SolverTask)root).state = state;
         root.quietlyComplete();
@@ -315,14 +312,30 @@ public class CoordinatedLogical {
     }
     @Override
     public boolean onExceptionalCompletion(Throwable ex, CountedCompleter<?> caller) {
-      return !(getCompleter() instanceof SolverTask);
+      assert getCompleter() instanceof SolverTask;
+      return false;
     }
   }
 
+  /**
+   * @implNote Every deduction strategy (the {@code private} methods besides {@link BoardState#setValue}) has the following attributes:
+   * <ul><li>name ending in {@code Cols}, {@code Rows}, or {@code Box},
+   *   indicating whether it scans across the {@link #BOX_WIDTH} columns the box occupies, the {@link #BOX_HEIGHT} rows, or just the box itself
+   * <li>does <em>not</em> add additional {@link #candidates} or remove solved {@link BoardState#sudoku} cells,
+   *   nor actively attempt to solve cells outside the specified box (eliminating others' candidates is okay though)
+   * <li>conversely, assumes no {@link BoardState#candidates} will be added or {@link BoardState#sudoku} cells will be removed during its execution
+   * <li>returns {@code true} if any {@link BoardState#candidates} have been removed or {@link BoardState#sudoku} cells have been filled.</ul>
+   * Note that {@link #pointingBox} never attempts to modify the given box, instead eliminating candidates in the <em>other</em> boxes in its row/column.
+   * @implNote Also, the following conventions are adhered to within each method:
+   * <ul><li>{@code i} and {@code j} refer to the column/row currently being modified.
+   * <li>{@code i1} and {@code j1} (and so on) refer to the column/row being compared.
+   * <li>{@code c} is the candidate being considered.</ul>
+   */
   private static class SubsolverTask extends RecursiveTask<Boolean> {
     private final BoardState state;
-    private int boxI, boxJ;
-    private boolean isRow;
+    private int boxI, boxJ,  // which box to focus on
+      minX, maxX, minY, maxY;  // its range of cells
+    private final boolean isRow;
 
     /**
      * Constructs a task that attempts to make logical deductions focusing on a single box and its row/column.
@@ -338,6 +351,10 @@ public class CoordinatedLogical {
       this.isRow = isRow;
     }
 
+    /**
+     * Wrapper for {@link #doSolveStep}.
+     * @return If any logical deductions could be made.
+     */
     @Override
     public Boolean compute() {
       try {
@@ -350,26 +367,27 @@ public class CoordinatedLogical {
 
     /**
      * Attempts to make each type of logical deduction.
+     * @return If any candidates were eliminated or any knowns were filled in.
      * @throws UnsolvableException If some kind of contradiction was found.
      */
     boolean doSolveStep() throws UnsolvableException {
-      final int minX = boxJ * BOX_WIDTH, maxX = minX + BOX_WIDTH,
-        minY = boxI * BOX_HEIGHT, maxY = minY + BOX_HEIGHT;
+      minX = boxJ * BOX_WIDTH; maxX = minX + BOX_WIDTH;
+      minY = boxI * BOX_HEIGHT; maxY = minY + BOX_HEIGHT;
       boolean dirtied = false;
-      dirtied |= nakedSinglesBox(minY, maxY, minX, maxX);
-      dirtied |= isRow ? hiddenSinglesRows(minY, maxY, minX, maxX) : hiddenSinglesCols(minY, maxY, minX, maxX);
-      dirtied |= hiddenSinglesBox(minY, maxY, minX, maxX);
-      dirtied |= isRow ? nakedPairsRows(minY, maxY, minX, maxX) : nakedPairsCols(minY, maxY, minX, maxX);
-      dirtied |= nakedPairsBox(minY, maxY, minX, maxX);
-      dirtied |= isRow ? hiddenPairsRows(minY, maxY, minX, maxX) : hiddenPairsCols(minY, maxY, minX, maxX);
-      dirtied |= hiddenPairsBox(minY, maxY, minX, maxX);
-      dirtied |= isRow ? boxLineRows(minY, maxY, minX, maxX) : boxLineCols(minY, maxY, minX, maxX);
-      dirtied |= pointingBox(minY, maxY, minX, maxX);
+      dirtied |= nakedSinglesBox();
+      dirtied |= isRow ? hiddenSinglesRows() : hiddenSinglesCols();
+      dirtied |= hiddenSinglesBox();
+      dirtied |= isRow ? nakedPairsRows() : nakedPairsCols();
+      dirtied |= nakedPairsBox();
+      dirtied |= isRow ? hiddenPairsRows() : hiddenPairsCols();
+      dirtied |= hiddenPairsBox();
+      dirtied |= isRow ? boxLineRows() : boxLineCols();
+      dirtied |= pointingBox();
       return dirtied;
     }
 
     // Fills in cells that have only one candidate value.
-    private boolean nakedSinglesBox(int minY, int maxY, int minX, int maxX) throws UnsolvableException {
+    private boolean nakedSinglesBox() throws UnsolvableException {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -397,7 +415,7 @@ public class CoordinatedLogical {
     }
 
     // Fills in cells that have a candidate value that no other cell in their region has.
-    private boolean hiddenSinglesRows(int minY, int maxY, int minX, int maxX) {
+    private boolean hiddenSinglesRows() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -421,7 +439,7 @@ public class CoordinatedLogical {
       }
       return dirtied;
     }
-    private boolean hiddenSinglesCols(int minY, int maxY, int minX, int maxX) {
+    private boolean hiddenSinglesCols() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -445,7 +463,7 @@ public class CoordinatedLogical {
       }
       return dirtied;
     }
-    private boolean hiddenSinglesBox(int minY, int maxY, int minX, int maxX) {
+    private boolean hiddenSinglesBox() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -474,7 +492,7 @@ public class CoordinatedLogical {
 
     // Looks for cells within the same region which share their only two candidates, and eliminates those from other cells in that region.
     // Note that this also finds cells which share a single candidate, in which case this reduces to naked singles again which is fine.
-    private boolean nakedPairsRows(int minY, int maxY, int minX, int maxX) {
+    private boolean nakedPairsRows() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -513,7 +531,7 @@ public class CoordinatedLogical {
       }
       return dirtied;
     }
-    private boolean nakedPairsCols(int minY, int maxY, int minX, int maxX) {
+    private boolean nakedPairsCols() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -552,7 +570,7 @@ public class CoordinatedLogical {
       }
       return dirtied;
     }
-    private boolean nakedPairsBox(int minY, int maxY, int minX, int maxX) {
+    private boolean nakedPairsBox() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -597,7 +615,7 @@ public class CoordinatedLogical {
     }
 
     // Looks for cells which are the only two in their region that have two candidates, and eliminates other candidates from them.
-    private boolean hiddenPairsRows(int minY, int maxY, int minX, int maxX) {
+    private boolean hiddenPairsRows() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -637,7 +655,7 @@ public class CoordinatedLogical {
       }
       return dirtied;
     }
-    private boolean hiddenPairsCols(int minY, int maxY, int minX, int maxX) {
+    private boolean hiddenPairsCols() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -676,7 +694,7 @@ public class CoordinatedLogical {
       }
       return dirtied;
     }
-    private boolean hiddenPairsBox(int minY, int maxY, int minX, int maxX) {
+    private boolean hiddenPairsBox() {
       boolean dirtied = false;
       // for each cell,
       for (int i = minY; i < maxY; i++) {
@@ -720,7 +738,7 @@ public class CoordinatedLogical {
     }
 
     // Looks for candidates whose only cells in a row/column are in this box, and eliminates them from other cells in this box.
-    private boolean boxLineRows(int minY, int maxY, int minX, int maxX) throws UnsolvableException {
+    private boolean boxLineRows() throws UnsolvableException {
       boolean dirtied = false;
       // for each row,
       for (int i = minY; i < maxY; i++) {
@@ -751,7 +769,7 @@ public class CoordinatedLogical {
       }
       return dirtied;
     }
-    private boolean boxLineCols(int minY, int maxY, int minX, int maxX) throws UnsolvableException {
+    private boolean boxLineCols() throws UnsolvableException {
       boolean dirtied = false;
       // for each column,
       for (int j = minX; j < maxX; j++) {
@@ -784,7 +802,7 @@ public class CoordinatedLogical {
     }
 
     // Looks for candidates whose only cells in this box are in the same row/column, and eliminates them from other cells in that row/column.
-    private boolean pointingBox(int minY, int maxY, int minX, int maxX) {
+    private boolean pointingBox() {
       boolean dirtied = false;
       // for each row,
       for (int i = minY; i < maxY; i++) {
